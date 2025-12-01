@@ -2,7 +2,7 @@
  * @Author: 星年 && jixingnian@gmail.com
  * @Date: 2025-12-01 13:45:08
  * @LastEditors: xingnian jixingnian@gmail.com
- * @LastEditTime: 2025-12-01 15:21:35
+ * @LastEditTime: 2025-12-01 15:53:39
  * @FilePath: \xn_esp32_coze_chat_watering\README.md
  * @Description: 
  * 

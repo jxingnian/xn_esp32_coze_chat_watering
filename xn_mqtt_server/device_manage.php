@@ -206,7 +206,6 @@ include __DIR__ . '/header.php';
         <div style="margin-top:8px;">
             <button type="button" class="btn btn-primary" id="btn-watering-on">开启浇花</button>
             <button type="button" class="btn" id="btn-watering-off">关闭浇花</button>
-            <button type="button" class="btn" id="btn-watering-refresh" style="margin-left:8px;">刷新状态</button>
         </div>
         <p style="margin-top:8px; font-size:13px; color:#666;">
             浇花开关通过 MQTT 控制电机 IO，Topic 为
@@ -216,15 +215,45 @@ include __DIR__ . '/header.php';
 </div>
 
 <?php
-$planEnabled  = $wateringPlan && !empty($wateringPlan['enabled']);
-$planInterval = $wateringPlan && isset($wateringPlan['interval_min']) ? (int)$wateringPlan['interval_min'] : 60;
+$planEnabled = $wateringPlan && !empty($wateringPlan['enabled']);
+$daysMask    = 0;
+if ($wateringPlan && isset($wateringPlan['days_mask'])) {
+    $daysMask = (int)$wateringPlan['days_mask'];
+} elseif ($wateringPlan && isset($wateringPlan['weekday'])) {
+    $tmp = (int)$wateringPlan['weekday'];
+    if ($tmp >= 1 && $tmp <= 7) {
+        $daysMask = 1 << ($tmp - 1);
+    }
+}
+$planHour     = $wateringPlan && isset($wateringPlan['hour']) ? (int)$wateringPlan['hour'] : 8;
+$planMinute   = $wateringPlan && isset($wateringPlan['minute']) ? (int)$wateringPlan['minute'] : 0;
 $planDuration = $wateringPlan && isset($wateringPlan['duration_s']) ? (int)$wateringPlan['duration_s'] : 10;
+
+$planSummary = '未启用';
+if ($planEnabled) {
+    $names    = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    $selected = [];
+    for ($i = 0; $i < 7; $i++) {
+        if ($daysMask & (1 << $i)) {
+            $selected[] = $names[$i];
+        }
+    }
+    if (!empty($selected)) {
+        $daysStr    = implode('、', $selected);
+        $planSummary = sprintf('%s %02d:%02d，每次浇水 %d 秒', $daysStr, $planHour, $planMinute, $planDuration);
+    } else {
+        $planSummary = '已启用，但尚未选择星期几';
+    }
+}
 ?>
 
 <h3 style="margin-top:24px;">定时浇水计划</h3>
 <div style="margin-top:8px; max-width:420px; font-size:14px;">
     <p style="font-size:13px; color:#666;">
-        可设置“每隔 N 分钟浇水 M 秒”，由设备本地定时执行。
+        可设置“每周固定时间浇水若干秒”，由设备本地定时执行（例如每周一、周三早上 8:00 浇水 10 秒）。
+    </p>
+    <p style="margin-top:4px; padding:6px 8px; background:#f7f7f9; border-radius:4px; font-size:13px; color:#333;">
+        当前计划：<?php echo htmlspecialchars($planSummary, ENT_QUOTES, 'UTF-8'); ?>
     </p>
     <form id="watering-plan-form" style="margin-top:8px;">
         <div class="form-group">
@@ -232,8 +261,21 @@ $planDuration = $wateringPlan && isset($wateringPlan['duration_s']) ? (int)$wate
             <input type="checkbox" id="watering-enabled" <?php echo $planEnabled ? 'checked' : ''; ?>>
         </div>
         <div class="form-group" style="margin-top:8px;">
-            <label for="watering-interval">间隔（分钟）：</label>
-            <input type="number" id="watering-interval" class="input" min="1" max="1440" value="<?php echo (int)$planInterval; ?>">
+            <label style="display:block; margin-bottom:4px;">每周星期：</label>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; font-size:13px;">
+                <label style="margin:0;"><input type="checkbox" id="watering-weekday-1" <?php echo ($daysMask & (1 << 0)) ? 'checked' : ''; ?>> 周一</label>
+                <label style="margin:0;"><input type="checkbox" id="watering-weekday-2" <?php echo ($daysMask & (1 << 1)) ? 'checked' : ''; ?>> 周二</label>
+                <label style="margin:0;"><input type="checkbox" id="watering-weekday-3" <?php echo ($daysMask & (1 << 2)) ? 'checked' : ''; ?>> 周三</label>
+                <label style="margin:0;"><input type="checkbox" id="watering-weekday-4" <?php echo ($daysMask & (1 << 3)) ? 'checked' : ''; ?>> 周四</label>
+                <label style="margin:0;"><input type="checkbox" id="watering-weekday-5" <?php echo ($daysMask & (1 << 4)) ? 'checked' : ''; ?>> 周五</label>
+                <label style="margin:0;"><input type="checkbox" id="watering-weekday-6" <?php echo ($daysMask & (1 << 5)) ? 'checked' : ''; ?>> 周六</label>
+                <label style="margin:0;"><input type="checkbox" id="watering-weekday-7" <?php echo ($daysMask & (1 << 6)) ? 'checked' : ''; ?>> 周日</label>
+            </div>
+        </div>
+        <div class="form-group" style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+            <label for="watering-hour" style="margin:0;">具体时间：</label>
+            <input type="number" id="watering-hour" class="input" min="0" max="23" value="<?php echo (int)$planHour; ?>" style="width:80px;"> 点
+            <input type="number" id="watering-minute" class="input" min="0" max="59" value="<?php echo (int)$planMinute; ?>" style="width:80px;"> 分
         </div>
         <div class="form-group" style="margin-top:8px;">
             <label for="watering-duration">每次时长（秒）：</label>
@@ -241,7 +283,6 @@ $planDuration = $wateringPlan && isset($wateringPlan['duration_s']) ? (int)$wate
         </div>
         <div style="margin-top:12px;">
             <button type="submit" class="btn btn-primary">保存定时计划</button>
-            <button type="button" class="btn" id="btn-watering-plan-refresh" style="margin-left:8px;">刷新计划</button>
         </div>
     </form>
     <p style="margin-top:8px; font-size:13px; color:#666;">
@@ -353,14 +394,13 @@ $planDuration = $wateringPlan && isset($wateringPlan['duration_s']) ? (int)$wate
 
     var btnWaterOn = document.getElementById('btn-watering-on');
     var btnWaterOff = document.getElementById('btn-watering-off');
-    var btnWaterRefresh = document.getElementById('btn-watering-refresh');
     var planForm = document.getElementById('watering-plan-form');
     var planEnabledInput = document.getElementById('watering-enabled');
-    var planIntervalInput = document.getElementById('watering-interval');
+    var planHourInput = document.getElementById('watering-hour');
+    var planMinuteInput = document.getElementById('watering-minute');
     var planDurationInput = document.getElementById('watering-duration');
-    var btnPlanRefresh = document.getElementById('btn-watering-plan-refresh');
 
-    function sendWateringCommand(subTopic, payload, okMessage) {
+    function sendWateringCommand(subTopic, payload) {
         var topic = baseTopic + '/watering/' + deviceId + '/' + subTopic;
         fetch('api/mqtt_publish.php', {
             method: 'POST',
@@ -369,9 +409,10 @@ $planDuration = $wateringPlan && isset($wateringPlan['duration_s']) ? (int)$wate
         }).then(function (resp) { return resp.json(); })
         .then(function (data) {
             if (data && data.status === 'ok') {
-                if (okMessage) {
-                    alert(okMessage);
-                }
+                // 指令发送成功后，稍等约 1 秒自动刷新整个页面以获取最新状态
+                setTimeout(function () {
+                    window.location.reload();
+                }, 1000);
             } else {
                 alert('发送失败：' + (data && data.message ? data.message : '未知错误'));
             }
@@ -382,19 +423,13 @@ $planDuration = $wateringPlan && isset($wateringPlan['duration_s']) ? (int)$wate
 
     if (btnWaterOn) {
         btnWaterOn.addEventListener('click', function () {
-            sendWateringCommand('set', 'on', '已发送开启浇花指令，请稍候刷新状态。');
+            sendWateringCommand('set', 'on');
         });
     }
 
     if (btnWaterOff) {
         btnWaterOff.addEventListener('click', function () {
-            sendWateringCommand('set', 'off', '已发送关闭浇花指令，请稍候刷新状态。');
-        });
-    }
-
-    if (btnWaterRefresh) {
-        btnWaterRefresh.addEventListener('click', function () {
-            sendWateringCommand('get_status', '', '已请求设备上报浇花状态，请稍候刷新页面查看最新信息。');
+            sendWateringCommand('set', 'off');
         });
     }
 
@@ -403,11 +438,27 @@ $planDuration = $wateringPlan && isset($wateringPlan['duration_s']) ? (int)$wate
             e.preventDefault();
 
             var enabled = planEnabledInput && planEnabledInput.checked ? 1 : 0;
-            var interval = planIntervalInput ? parseInt(planIntervalInput.value, 10) : 0;
+            var daysMask = 0;
+            for (var d = 1; d <= 7; d++) {
+                var cb = document.getElementById('watering-weekday-' + d);
+                if (cb && cb.checked) {
+                    daysMask |= (1 << (d - 1));
+                }
+            }
+            var hour = planHourInput ? parseInt(planHourInput.value, 10) : 0;
+            var minute = planMinuteInput ? parseInt(planMinuteInput.value, 10) : 0;
             var duration = planDurationInput ? parseInt(planDurationInput.value, 10) : 0;
 
-            if (!interval || interval <= 0) {
-                alert('间隔必须大于 0 分钟');
+            if (!daysMask) {
+                alert('请至少选择一个星期几');
+                return;
+            }
+            if (isNaN(hour) || hour < 0 || hour > 23) {
+                alert('小时必须在 0-23 之间');
+                return;
+            }
+            if (isNaN(minute) || minute < 0 || minute > 59) {
+                alert('分钟必须在 0-59 之间');
                 return;
             }
             if (!duration || duration <= 0) {
@@ -415,14 +466,8 @@ $planDuration = $wateringPlan && isset($wateringPlan['duration_s']) ? (int)$wate
                 return;
             }
 
-            var payload = 'enabled=' + enabled + '\ninterval_min=' + interval + '\nduration_s=' + duration;
-            sendWateringCommand('set_plan', payload, '定时浇水计划已下发，请稍候刷新计划。');
-        });
-    }
-
-    if (btnPlanRefresh) {
-        btnPlanRefresh.addEventListener('click', function () {
-            sendWateringCommand('get_plan', '', '已请求设备上报定时浇水计划，请稍候刷新页面查看最新信息。');
+            var payload = 'enabled=' + enabled + '\ndays_mask=' + daysMask + '\nhour=' + hour + '\nminute=' + minute + '\nduration_s=' + duration;
+            sendWateringCommand('set_plan', payload);
         });
     }
 })();

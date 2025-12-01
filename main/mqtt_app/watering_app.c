@@ -38,12 +38,13 @@ static bool s_watering_on  = false;
 
 typedef struct {
     bool enabled;
+    int  days_mask;  /* bit0=Mon ... bit6=Sun */
     int  hour;
     int  minute;
     int  duration_s;
 } watering_plan_t;
 
-static watering_plan_t s_plan      = { false, 8, 0, 10 };
+static watering_plan_t s_plan      = { false, 0x7F, 8, 0, 10 };
 static TaskHandle_t    s_plan_task = NULL;
 
 static void watering_gpio_init(void)
@@ -109,11 +110,12 @@ static void watering_publish_plan(void)
 
     watering_plan_t plan = s_plan;
 
-    char json[128];
+    char json[160];
     snprintf(json,
              sizeof(json),
-             "{\"enabled\":%s,\"hour\":%d,\"minute\":%d,\"duration_s\":%d}",
+             "{\"enabled\":%s,\"days_mask\":%d,\"hour\":%d,\"minute\":%d,\"duration_s\":%d}",
              plan.enabled ? "true" : "false",
+             plan.days_mask,
              plan.hour,
              plan.minute,
              plan.duration_s);
@@ -145,7 +147,7 @@ static void watering_plan_task(void *arg)
             continue;
         }
 
-        time_t now = 0;
+        time_t    now = 0;
         struct tm tm_now;
         memset(&tm_now, 0, sizeof(tm_now));
 
@@ -154,24 +156,62 @@ static void watering_plan_task(void *arg)
             continue;
         }
 
-        int now_min  = tm_now.tm_hour * 60 + tm_now.tm_min;
-        int plan_min = plan.hour * 60 + plan.minute;
+        int week_min = 7 * 24 * 60;
 
-        if (plan_min < 0) {
-            plan_min = 0;
-        }
-        if (plan_min >= 24 * 60) {
-            plan_min = 24 * 60 - 1;
+        int now_wday = tm_now.tm_wday;
+        if (now_wday < 0 || now_wday > 6) {
+            now_wday = 0;
         }
 
-        int diff_min;
-        if (plan_min > now_min) {
-            diff_min = plan_min - now_min;
-        } else {
-            diff_min = (24 * 60 - now_min) + plan_min;
+        int now_total_min = now_wday * 24 * 60 + tm_now.tm_hour * 60 + tm_now.tm_min;
+
+        int days_mask = plan.days_mask;
+        if (days_mask <= 0) {
+            vTaskDelay(pdMS_TO_TICKS(10000));
+            continue;
         }
 
-        int64_t diff_ms = (int64_t)diff_min * 60 * 1000;
+        int plan_hour = plan.hour;
+        if (plan_hour < 0) {
+            plan_hour = 0;
+        }
+        if (plan_hour > 23) {
+            plan_hour = 23;
+        }
+
+        int plan_minute = plan.minute;
+        if (plan_minute < 0) {
+            plan_minute = 0;
+        }
+        if (plan_minute > 59) {
+            plan_minute = 59;
+        }
+
+        int best_diff_min = week_min;
+
+        for (int d = 1; d <= 7; d++) {
+            if ((days_mask & (1 << (d - 1))) == 0) {
+                continue;
+            }
+
+            int plan_total_min = (d - 1) * 24 * 60 + plan_hour * 60 + plan_minute;
+            int diff_min;
+            if (plan_total_min > now_total_min) {
+                diff_min = plan_total_min - now_total_min;
+            } else {
+                diff_min = week_min - (now_total_min - plan_total_min);
+            }
+
+            if (diff_min < best_diff_min) {
+                best_diff_min = diff_min;
+            }
+        }
+
+        if (best_diff_min <= 0 || best_diff_min > week_min) {
+            best_diff_min = 1;
+        }
+
+        int64_t diff_ms = (int64_t)best_diff_min * 60 * 1000;
         if (diff_ms <= 0) {
             diff_ms = 1000;
         }
@@ -285,6 +325,24 @@ static void watering_handle_set_plan(const uint8_t *payload, int payload_len)
         if (strncmp(line, "enabled=", 8) == 0) {
             int v = atoi(line + 8);
             plan.enabled = (v != 0);
+        } else if (strncmp(line, "days_mask=", 10) == 0) {
+            int v = atoi(line + 10);
+            if (v < 0) {
+                v = 0;
+            }
+            if (v > 0x7F) {
+                v = 0x7F;
+            }
+            plan.days_mask = v;
+        } else if (strncmp(line, "weekday=", 8) == 0) {
+            int v = atoi(line + 8);
+            if (v < 1) {
+                v = 1;
+            }
+            if (v > 7) {
+                v = 7;
+            }
+            plan.days_mask = (1 << (v - 1));
         } else if (strncmp(line, "hour=", 5) == 0) {
             int v = atoi(line + 5);
             if (v < 0) {
