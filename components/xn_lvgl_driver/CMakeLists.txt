@@ -1,0 +1,11 @@
+idf_component_register(
+    SRCS
+        "src/xn_lvgl.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        lvgl
+        xn_bsp_spd2010
+        esp_timer
+        freertos
+)

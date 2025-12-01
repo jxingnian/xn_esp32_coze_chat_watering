@@ -1,0 +1,17 @@
+idf_component_register(
+    SRCS
+        "src/bsp_i2c_driver.c"
+        "src/bsp_exio_tca9554.c"
+        "src/bsp_panel_spd2010.c"
+        "src/bsp_touch_spd2010.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        driver
+        esp_lcd
+        esp_timer
+        freertos
+        lvgl
+        espressif__esp_lcd_spd2010
+        espressif__esp_lcd_touch_spd2010
+)
