@@ -3,8 +3,8 @@
  * @Author: 星年 && jixingnian@gmail.com
  * @Date: 2025-11-24 14:07:05
  * @LastEditors: xingnian jixingnian@gmail.com
- * @LastEditTime: 2025-11-24 20:38:08
- * @FilePath: \xn_esp32_web_mqtt_manager\xn_mqtt_server\config.php
+ * @LastEditTime: 2025-12-01 15:12:43
+ * @FilePath: \xn_esp32_coze_chat_watering\xn_mqtt_server\config.php
  * @Description: 基础配置
  * 
  * Copyright (c) 2025 by ${git_name_email}, All Rights Reserved. 
@@ -13,9 +13,9 @@
 // MySQL 数据库连接配置（请按宝塔中创建的数据库信息修改）
 define('XN_DB_HOST', '127.0.0.1');      // 数据库主机
 define('XN_DB_PORT', 3306);             // 端口
-define('XN_DB_NAME', 'xn_mqtt');   // 数据库名
-define('XN_DB_USER', 'xn_mqtt');   // 用户名
-define('XN_DB_PASS', 'xn_mqtt_pass');   // 密码
+define('XN_DB_NAME', '127_0_0_1_17710');   // 数据库名
+define('XN_DB_USER', '127_0_0_1_17710');   // 用户名
+define('XN_DB_PASS', 'adRirdRcfkcBKAma');   // 密码
 define('XN_DB_CHARSET', 'utf8mb4');     // 字符集
 
 // 管理后台 Session 名称

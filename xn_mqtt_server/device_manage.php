@@ -53,6 +53,7 @@ $online = $ts && ($now - $ts <= XN_DEVICE_OFFLINE_SECONDS);
 $wifiStatus     = null;
 $wifiSaved      = [];
 $wateringStatus = null;
+$wateringPlan   = null;
 if (!empty($device['meta_json'])) {
     $meta = json_decode($device['meta_json'], true);
     if (is_array($meta)) {
@@ -69,6 +70,9 @@ if (!empty($device['meta_json'])) {
         }
         if (isset($meta['watering_status']) && is_array($meta['watering_status'])) {
             $wateringStatus = $meta['watering_status'];
+        }
+        if (isset($meta['watering_plan']) && is_array($meta['watering_plan'])) {
+            $wateringPlan = $meta['watering_plan'];
         }
     }
 }
@@ -211,6 +215,42 @@ include __DIR__ . '/header.php';
     </div>
 </div>
 
+<?php
+$planEnabled  = $wateringPlan && !empty($wateringPlan['enabled']);
+$planInterval = $wateringPlan && isset($wateringPlan['interval_min']) ? (int)$wateringPlan['interval_min'] : 60;
+$planDuration = $wateringPlan && isset($wateringPlan['duration_s']) ? (int)$wateringPlan['duration_s'] : 10;
+?>
+
+<h3 style="margin-top:24px;">定时浇水计划</h3>
+<div style="margin-top:8px; max-width:420px; font-size:14px;">
+    <p style="font-size:13px; color:#666;">
+        可设置“每隔 N 分钟浇水 M 秒”，由设备本地定时执行。
+    </p>
+    <form id="watering-plan-form" style="margin-top:8px;">
+        <div class="form-group">
+            <label for="watering-enabled">启用定时浇水：</label>
+            <input type="checkbox" id="watering-enabled" <?php echo $planEnabled ? 'checked' : ''; ?>>
+        </div>
+        <div class="form-group" style="margin-top:8px;">
+            <label for="watering-interval">间隔（分钟）：</label>
+            <input type="number" id="watering-interval" class="input" min="1" max="1440" value="<?php echo (int)$planInterval; ?>">
+        </div>
+        <div class="form-group" style="margin-top:8px;">
+            <label for="watering-duration">每次时长（秒）：</label>
+            <input type="number" id="watering-duration" class="input" min="1" max="600" value="<?php echo (int)$planDuration; ?>">
+        </div>
+        <div style="margin-top:12px;">
+            <button type="submit" class="btn btn-primary">保存定时计划</button>
+            <button type="button" class="btn" id="btn-watering-plan-refresh" style="margin-left:8px;">刷新计划</button>
+        </div>
+    </form>
+    <p style="margin-top:8px; font-size:13px; color:#666;">
+        计划通过 MQTT 下发到设备，Topic 为
+        <?php echo htmlspecialchars(XN_MQTT_BASE_TOPIC, ENT_QUOTES, 'UTF-8'); ?>/watering/<?php echo htmlspecialchars($device['device_id'], ENT_QUOTES, 'UTF-8'); ?>/set_plan，
+        设备会通过 <?php echo htmlspecialchars(XN_MQTT_UPLINK_BASE_TOPIC, ENT_QUOTES, 'UTF-8'); ?>/watering/<?php echo htmlspecialchars($device['device_id'], ENT_QUOTES, 'UTF-8'); ?>/plan 上报当前计划。
+    </p>
+</div>
+
 <script>
 (function() {
     var form = document.getElementById('wifi-config-form');
@@ -314,6 +354,11 @@ include __DIR__ . '/header.php';
     var btnWaterOn = document.getElementById('btn-watering-on');
     var btnWaterOff = document.getElementById('btn-watering-off');
     var btnWaterRefresh = document.getElementById('btn-watering-refresh');
+    var planForm = document.getElementById('watering-plan-form');
+    var planEnabledInput = document.getElementById('watering-enabled');
+    var planIntervalInput = document.getElementById('watering-interval');
+    var planDurationInput = document.getElementById('watering-duration');
+    var btnPlanRefresh = document.getElementById('btn-watering-plan-refresh');
 
     function sendWateringCommand(subTopic, payload, okMessage) {
         var topic = baseTopic + '/watering/' + deviceId + '/' + subTopic;
@@ -350,6 +395,34 @@ include __DIR__ . '/header.php';
     if (btnWaterRefresh) {
         btnWaterRefresh.addEventListener('click', function () {
             sendWateringCommand('get_status', '', '已请求设备上报浇花状态，请稍候刷新页面查看最新信息。');
+        });
+    }
+
+    if (planForm) {
+        planForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            var enabled = planEnabledInput && planEnabledInput.checked ? 1 : 0;
+            var interval = planIntervalInput ? parseInt(planIntervalInput.value, 10) : 0;
+            var duration = planDurationInput ? parseInt(planDurationInput.value, 10) : 0;
+
+            if (!interval || interval <= 0) {
+                alert('间隔必须大于 0 分钟');
+                return;
+            }
+            if (!duration || duration <= 0) {
+                alert('时长必须大于 0 秒');
+                return;
+            }
+
+            var payload = 'enabled=' + enabled + '\ninterval_min=' + interval + '\nduration_s=' + duration;
+            sendWateringCommand('set_plan', payload, '定时浇水计划已下发，请稍候刷新计划。');
+        });
+    }
+
+    if (btnPlanRefresh) {
+        btnPlanRefresh.addEventListener('click', function () {
+            sendWateringCommand('get_plan', '', '已请求设备上报定时浇水计划，请稍候刷新页面查看最新信息。');
         });
     }
 })();

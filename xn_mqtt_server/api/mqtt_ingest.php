@@ -135,9 +135,10 @@ if ($topic !== '') {
 //  - xn/esp/wifi/<device_id>/saved     上报已保存 WiFi 列表（JSON）
 //  - xn/esp/watering/<device_id>/status 上报当前浇花开关状态（JSON）
 if ($topic !== '' && $payload !== '') {
-    $wifiStatusPrefix    = XN_MQTT_UPLINK_BASE_TOPIC . '/wifi/' . $clientId . '/status';
-    $wifiSavedPrefix     = XN_MQTT_UPLINK_BASE_TOPIC . '/wifi/' . $clientId . '/saved';
+    $wifiStatusPrefix     = XN_MQTT_UPLINK_BASE_TOPIC . '/wifi/' . $clientId . '/status';
+    $wifiSavedPrefix      = XN_MQTT_UPLINK_BASE_TOPIC . '/wifi/' . $clientId . '/saved';
     $wateringStatusPrefix = XN_MQTT_UPLINK_BASE_TOPIC . '/watering/' . $clientId . '/status';
+    $wateringPlanPrefix   = XN_MQTT_UPLINK_BASE_TOPIC . '/watering/' . $clientId . '/plan';
 
     $needUpdateMeta = false;
     $meta           = [];
@@ -166,6 +167,12 @@ if ($topic !== '' && $payload !== '') {
         if (is_array($watering)) {
             $meta['watering_status'] = $watering;
             $needUpdateMeta          = true;
+        }
+    } elseif (strpos($topic, $wateringPlanPrefix) === 0) {
+        $plan = json_decode($payload, true);
+        if (is_array($plan)) {
+            $meta['watering_plan'] = $plan;
+            $needUpdateMeta        = true;
         }
     }
 
