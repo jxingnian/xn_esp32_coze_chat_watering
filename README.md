@@ -1,238 +1,239 @@
 <!--
  * @Author: 星年 && jixingnian@gmail.com
- * @Date: 2025-11-22 15:20:30
+ * @Date: 2025-12-01 13:45:08
  * @LastEditors: xingnian jixingnian@gmail.com
- * @LastEditTime: 2025-11-23 12:09:25
- * @FilePath: \xn_web_wifi_config\README.md
- * @Description: ESP32 网页 WiFi 配网组件使用说明
+ * @LastEditTime: 2025-12-01 15:21:35
+ * @FilePath: \xn_esp32_coze_chat_watering\README.md
+ * @Description: 
  * 
  * Copyright (c) 2025 by ${git_name_email}, All Rights Reserved. 
 -->
 
-# ESP32 网页 WiFi 配网组件（xn_web_wifi_config）
+# xn_esp32_coze_chat_watering 项目说明
 
 ## 1. 项目简介
 
-本仓库提供一个基于 ESP-IDF 的 **ESP32 网页 WiFi 配网组件**，集成了：
+本项目是一个基于 **ESP32 + MQTT + PHP 后台** 的物联网示例工程，包含：
 
-- **WiFi 管理状态机**：自动重连、轮询多组已保存 AP；
-- **SoftAP + Web 配网页面**：通过浏览器扫描附近 WiFi 并输入密码连接；
-- **存储模块**：在 NVS 中保存/删除多组 WiFi；
-- **前后端分离的 Web UI**：静态页面放在 SPIFFS 分区，通过 HTTP API 与后台交互。
+- **ESP32 固件**：
+  - 网页 WiFi 配网组件（SoftAP + Web 页面）；
+  - 通过 MQTT 与后端交互的通用管理框架；
+  - 自动浇花应用：
+    - 网页点击开/关浇花；
+    - 每天固定时间自动浇水若干秒（定时计划）。
+- **PHP 后台（xn_mqtt_server）**：
+  - 设备注册与管理后台；
+  - 集成内置 MQTT 客户端，提供简单 API；
+  - 通过 MQTT 规则引擎接收设备上报的状态（WiFi / 浇花 / 定时计划）。
 
-目标是让应用层只需在 `app_main` 里初始化一次管理模块，就可以快速接入配网能力。
+整体架构：
+
+```text
+ESP32 <——MQTT——> EMQX 等 Broker <——HTTP + MQTT——> xn_mqtt_server(PHP 后台) <——Web 浏览器
+```
+
+你可以在后台页面中查看设备在线状态、WiFi 状态、浇花状态，并下发浇花开关和每天定时浇水计划。
 
 ---
 
-## 2. 目录结构
+## 2. 目录结构概览
+
+只列出与本项目相关的主要目录：
 
 - **main/**
-  - `main.c`：应用入口示例（可根据自己项目修改）。
+  - `main.c`：ESP32 应用入口，初始化 WiFi 管理、Web MQTT 管理器和各类 MQTT App。
+  - `mqtt_app/`
+    - `wifi_config_app.c`：通过 MQTT 从后台接收 WiFi 配置信息、上报 WiFi 状态。
+    - `watering_app.c`：通过 MQTT 控制浇花 GPIO，并实现“每天定时浇水”计划。
 
-- **components/xn_web_wifi_manger/**
-  - **include/**
-    - `xn_wifi_manage.h`：WiFi 管理模块对外接口与配置结构。
-    - `wifi_module.h`：底层 WiFi 封装接口（init / connect / scan）。
-    - `storage_module.h`：保存/加载 WiFi 配置的接口。
-    - `web_module.h`：Web 服务器与 HTTP API 接口。
-  - **src/**
-    - `xn_wifi_manage.c`：WiFi 管理状态机 + 定时任务调度。
-    - `wifi_module.c`：对 ESP-IDF `esp_wifi` 的封装（连接、扫描）。
-    - `web_module.c`：HTTP 服务器、SPIFFS 静态资源、JSON API。
-    - `storage_module.c`：基于 NVS 的 WiFi 配置存储实现。
-  - **wifi_spiffs/**
-    - `index.html` / `app.css` / `app.js`：Web 配网页面前端资源。
+- **components/**
+  - `xn_web_wifi_manger/`：网页 WiFi 配网组件（SoftAP + Web + HTTP API）。
+  - `xn_iot_manager_mqtt/`：Web MQTT 管理器，负责统一处理 MQTT 连接、分发消息给各 App。
+  - 其他如音频、Coze Chat、lottie 等组件可按需要启用/注释。
 
-- 根目录：
-  - `CMakeLists.txt`：顶层构建脚本。
-  - `partitions.csv`：包含 `wifi_spiffs` SPIFFS 分区配置。
-  - `sdkconfig.defaults`：默认配置。
-
----
-
-## 3. 环境要求
-
-- 硬件：ESP32 系列开发板（2.4G WiFi）。
-- 软件：已安装配置好的 ESP-IDF。
+- **xn_mqtt_server/**（PHP 后台）
+  - `config.php`：数据库、后台登录和 MQTT 规则口令等基础配置。
+  - `mqtt_config.php`：MQTT 连接参数与 Topic 前缀配置。
+  - `header.php` / `footer.php`：后台通用头尾模板。
+  - `index.php`：设备列表页面。
+  - `device_manage.php`：单设备管理页（WiFi 状态、浇花状态、定时计划配置等）。
+  - `api/`
+    - `mqtt_ingest.php`：MQTT 规则引擎 HTTP 转发入口，处理设备上报消息。
+    - `mqtt_publish.php`：后台向设备下发 MQTT 消息的简单 API。
+    - `device_manage_status.php` 等：辅助接口。
 
 ---
 
-## 4. 编译与烧录
+## 3. 快速开始
 
-在工程根目录下：
+### 3.1 准备环境
+
+- 硬件：ESP32 开发板（如 ESP32-S3）。
+- 软件：
+  - ESP-IDF 环境（用于编译烧录固件）；
+  - Web 服务器（如宝塔 + PHP + MySQL）；
+  - MQTT Broker（如 EMQX）。
+
+### 3.2 配置 PHP 后台
+
+1. **数据库配置**：
+   - 编辑 `xn_mqtt_server/config.php`，根据你在宝塔中创建的数据库信息修改：
+     - `XN_DB_HOST` / `XN_DB_PORT` / `XN_DB_NAME` / `XN_DB_USER` / `XN_DB_PASS`；
+   - 配置 `XN_DEFAULT_ADMIN_USER` / `XN_DEFAULT_ADMIN_PASS` 作为初始后台账号。
+
+2. **MQTT 配置**：
+   - 编辑 `xn_mqtt_server/mqtt_config.php`，设置：
+     - `XN_MQTT_HOST` / `XN_MQTT_PORT` / `XN_MQTT_USERNAME` / `XN_MQTT_PASSWORD` 等；
+     - `XN_MQTT_BASE_TOPIC`（默认例如 `xn/web`）；
+     - `XN_MQTT_UPLINK_BASE_TOPIC`（默认例如 `xn/esp`）。
+
+3. **部署代码**：
+   - 将 `xn_mqtt_server` 部署到你的 PHP 站点根目录或子目录；
+   - 确保 `config.php`、`mqtt_config.php` 可被正确加载。
+
+4. **初始化数据库**：
+   - 按 `xn_mqtt_server` 目录下的 SQL 说明（如有提供）或后台自动建表逻辑准备好数据表。
+
+5. **MQTT 规则引擎**：
+   - 在 EMQX 中配置规则，将设备上行 Topic（如 `xn/esp/#`）转发到：
+     - `POST http(s)://<你的域名或IP>/xn_mqtt_server/api/mqtt_ingest.php?token=...`
+   - `token` 应与 `config.php` 中的 `XN_INGEST_SHARED_SECRET` 保持一致。
+
+### 3.3 编译和烧录 ESP32
+
+在工程根目录执行（根据你的芯片型号调整 target）：
 
 ```bash
-idf.py set-target esp32-s3      # 如已配置可省略
+idf.py set-target esp32s3   # 或 esp32 等
 idf.py build
 idf.py flash
 idf.py monitor
 ```
 
-本组件的 `CMakeLists.txt` 中包含：
-
-```cmake
-spiffs_create_partition_image(wifi_spiffs wifi_spiffs FLASH_IN_PROJECT)
-```
-
-构建时会自动将 `components/xn_web_wifi_manger/wifi_spiffs` 下的静态文件
-打包进 `wifi_spiffs` 分区并在 `flash` 时一起烧录，无需单独生成 SPIFFS 镜像。
+烧录成功后，串口会打印日志，WiFi 管理和 MQTT 连接过程可在 log 中看到。
 
 ---
 
-## 5. 在 app_main 中使用示例
+## 4. ESP32 端主要逻辑
 
-典型使用流程如下（示意代码，仅展示核心调用）：
+### 4.1 WiFi 管理与网页配网
 
-```c
-void app_main(void)
-{
-    // 初始化 NVS / 日志等
-    nvs_flash_init();
+- 通过 `wifi_manage_init()` 初始化 WiFi 管理模块：
+  - 支持 STA + AP 模式；
+  - 提供 SoftAP + Web 页面用于扫描 WiFi 和输入密码；
+  - 支持在 NVS 中保存多组 AP，并自动重连。
 
-    // 使用默认配置，并按需覆盖部分字段
-    wifi_manage_config_t cfg = WIFI_MANAGE_DEFAULT_CONFIG();
+### 4.2 Web MQTT 管理器
 
-    // 可选：修改 AP SSID/密码/IP/Web 端口 等
-    // strcpy(cfg.ap_ssid, "My-ESP32-AP");
-    // strcpy(cfg.ap_password, "12345678");
-    // strcpy(cfg.ap_ip, "192.168.4.1");
-    // cfg.web_port = 80;
+- `web_mqtt_manager` 统一管理 MQTT 连接，负责：
+  - 连接配置在 `main.c` 中设置（Broker URI、base_topic 等）；
+  - 调用 `web_mqtt_manager_register_app("wifi", ...)` / `web_mqtt_manager_register_app("watering", ...)` 注册子应用；
+  - 收到消息后根据 `base_topic/<app>/<device_id>/<cmd>` 分发给对应 App。
 
-    // 可选：设置 WiFi 状态回调，用于上层 UI 或日志
-    // cfg.wifi_event_cb = my_wifi_event_cb;
+### 4.3 WiFi 配置 MQTT App（wifi_config_app）
 
-    // 初始化管理模块（内部会初始化 WiFi / 存储 / Web 等子模块）
-    esp_err_t ret = wifi_manage_init(&cfg);
-    if (ret != ESP_OK) {
-        // 处理错误
-    }
-}
-```
+- 主要 Topic：
+  - 下行：
+    - `xn/web/wifi/<device_id>/set`：下发新的 WiFi SSID/密码（payload 为 `key=value` 多行文本）；
+    - `xn/web/wifi/<device_id>/get_status`：请求当前 WiFi 状态；
+    - `xn/web/wifi/<device_id>/get_saved`：请求已保存 WiFi 列表；
+    - `xn/web/wifi/<device_id>/connect_saved`：请求切换到某个已保存的 SSID。
+  - 上行：
+    - `xn/esp/wifi/<device_id>/status`：JSON 格式的 WiFi 状态；
+    - `xn/esp/wifi/<device_id>/saved`：JSON 格式的已保存 WiFi 列表。
 
-上电后管理模块会：
+后台通过 `mqtt_ingest.php` 将这些状态写入 `devices.meta_json`，供管理页面展示。
 
-- 初始化 WiFi / 存储 / Web 配网子模块；
-- 启动 STA + AP 模式；
-- 启动 HTTP 服务器监听 `cfg.web_port`（默认 80）。
+### 4.4 自动浇花 MQTT App（watering_app）
 
----
+#### 手动浇花控制
 
-## 6. Web 配网使用说明
+- 下行（Web → 设备）：
+  - `xn/web/watering/<device_id>/set`：payload 为 `"on"` / `"off"`，控制浇花电机 GPIO 开关；
+  - `xn/web/watering/<device_id>/get_status`：请求当前浇花状态。
 
-1. **连接 ESP32 的 AP**
+- 上行（设备 → Web）：
+  - `xn/esp/watering/<device_id>/status`：
+    - payload JSON：`{"on": true}` 或 `{"on": false}`。
 
-   - 默认 AP SSID：`XN-ESP32-AP`
-   - 默认密码：`12345678`
-   - AP IP：`192.168.4.1`（可通过 `wifi_manage_config_t.ap_ip` 修改）。
+#### 每天固定时间定时浇水
 
-2. **浏览器访问**
+定时计划由设备本地执行，通过 FreeRTOS 任务结合 `time()` 计算每天指定时间点。
 
-   在手机或电脑浏览器中输入：
+- 下行配置计划：
+  - Topic：`xn/web/watering/<device_id>/set_plan`
+  - payload 为多行文本：
 
-   ```text
-   http://192.168.4.1/
-   ```
+    ```text
+    enabled=1
+    hour=7
+    minute=30
+    duration_s=10
+    ```
 
-3. **网页功能**
+    字段说明：
 
-   - 查看当前 WiFi 连接状态（已连接 / 未连接 / 连接失败等）。
-   - 点击“开始扫描”扫描附近 2.4G WiFi，并以表格形式展示 SSID 与 RSSI。
-   - 点击某一条扫描结果可快速填充 SSID，手动输入密码后提交表单进行连接。
-   - 管理已保存 WiFi：查看列表、选择连接、删除已保存的条目。
+    - `enabled`：`1` 启用计划，`0` 停用；
+    - `hour`：0~23；
+    - `minute`：0~59；
+    - `duration_s`：每次浇水时长（秒），1~600。
 
-> 提示：部分安卓手机在检测到当前 WiFi 无互联网时，会自动切到移动数据。
-> 如访问 `http://192.168.4.1/` 打不开页面，可暂时关闭移动数据，
-> 或在系统弹出的“此网络无互联网访问”提示中选择“仍然使用此网络”。
+- 下行读取计划：
+  - Topic：`xn/web/watering/<device_id>/get_plan`，payload 为空。
 
----
+- 上行上报计划：
+  - Topic：`xn/esp/watering/<device_id>/plan`
+  - payload JSON 示例：
 
-## 7. 组件内部模块概览
+    ```json
+    {"enabled": true, "hour": 7, "minute": 30, "duration_s": 10}
+    ```
 
-### 7.1 WiFi 管理模块（xn_wifi_manage）
-
-- 对外配置结构：`wifi_manage_config_t`（见 `xn_wifi_manage.h`）。
-- 重要字段：
-  - `ap_ssid` / `ap_password` / `ap_ip`：配网 AP 的 SSID、密码与 IP；
-  - `web_port`：Web 配网页面 HTTP 端口；
-  - `save_wifi_count`：最多保存的 WiFi 条数；
-  - `max_retry_count`：单个 AP 连续重试次数；
-  - `reconnect_interval_ms`：整轮失败后多久再自动重试；
-  - `wifi_event_cb`：状态变化回调。
-
-内部通过一个周期性运行的任务驱动状态机，周期由
-`WIFI_MANAGE_STEP_INTERVAL_MS`（默认 1000ms）控制。
-
-### 7.2 底层 WiFi 模块（wifi_module）
-
-- 主要接口（见 `wifi_module.h`）：
-  - `wifi_module_init`：根据配置初始化 ESP32 WiFi（STA/AP/混合模式）。
-  - `wifi_module_connect`：连接指定 SSID + 密码。
-  - `wifi_module_scan`：扫描附近 AP 并返回结果数组。
-
-管理模块调用这些函数完成具体的连接与扫描动作。
-
-### 7.3 Web 模块（web_module）
-
-负责：
-
-- 挂载 SPIFFS 分区 `wifi_spiffs`；
-- 提供静态资源：`/`、`/index.html`、`/app.css`、`/app.js`；
-- 提供 JSON API：
-  - `GET  /api/wifi/status`
-  - `GET  /api/wifi/saved`
-  - `GET  /api/wifi/scan`
-  - `POST /api/wifi/connect`
-  - `POST /api/wifi/saved/delete`
-  - `POST /api/wifi/saved/connect`
-
-上层通过回调（在 `web_module_config_t` 中指定）与管理模块/存储模块解耦。
+后台会把 `watering_status` 和 `watering_plan` 保存在 `devices.meta_json` 中，供前端展示。
 
 ---
 
-## 8. 日志与调试
+## 5. 后台 Web 管理界面
 
-使用串口监视：
+访问 `xn_mqtt_server` 部署地址，登录后台后可以看到：
 
-```bash
-idf.py monitor
-```
+- **设备列表（index.php）**：
+  - 显示设备 ID、在线状态、最后心跳时间等；
+  - 进入单设备管理页。
 
-主要日志 TAG：
-
-- `wifi_module`：底层 WiFi 连接、扫描结果与错误。  
-- `wifi_manage`：管理状态机状态变更（已连接 / 未连接 / 连接失败等）。  
-- `web_module`：HTTP 访问、SPIFFS 挂载/读文件失败等。
-
-与 WiFi 扫描相关的日志示例（实际内容以代码为准）：
-
-- `wifi_manage: web scan request: max_cnt=...`
-- `wifi_module: start wifi scan, max_out=...`
-- `wifi_module: wifi scan done: found N AP(s), out=N`
-- `wifi_manage: wifi scan done: count=N`
-
-当网页扫描无结果或崩溃时，可优先查看这些日志定位问题。
+- **单设备管理页（device_manage.php）**：
+  - 在线/离线状态、管理模式；
+  - 当前 WiFi 状态、已保存 WiFi 列表以及通过 MQTT 配网；
+  - 自动浇花：
+    - 当前浇花状态（开/关）；
+    - 按钮：开启浇花 / 关闭浇花 / 刷新状态；
+  - 定时浇水计划：
+    - 是否启用；
+    - 每天几点几分浇水、持续多少秒；
+    - “保存定时计划” / “刷新计划” 按钮，实际通过 MQTT 的 `set_plan` / `get_plan` 与设备交互。
 
 ---
 
-## 9. 状态机简要说明
+## 6. 注意事项
 
-WiFi 管理层抽象为三种状态（见 `wifi_manage_state_t`）：
+- **时间同步**：
+  - 每天固定时间的定时浇水依赖 ESP32 的本地时间，需要通过 SNTP 或其他方式同步时间；
+  - 若时间不正确，浇水时间也会偏移。
 
-1. `WIFI_MANAGE_STATE_CONNECTED`：已成功连接路由器并获得 IP；
-2. `WIFI_MANAGE_STATE_DISCONNECTED`：未连接任何 WiFi；
-3. `WIFI_MANAGE_STATE_CONNECT_FAILED`：本轮所有候选 WiFi 均连接失败；
+- **安全性**：
+  - `XN_INGEST_SHARED_SECRET` 建议在线上环境使用随机复杂字符串，并在 MQTT 规则中以 `?token=` 形式传入；
+  - 数据库账号、密码请勿直接暴露在公共仓库。
 
-状态机会根据当前状态和事件（连接成功/失败、掉线等）自动选择下一步动作，
-例如：
-
-- 从“未连接”尝试连接已保存 WiFi；
-- 单个 AP 多次失败后切换到下一条；
-- 全部失败后进入“连接失败”状态，等待 `reconnect_interval_ms` 再重新尝试。
-
-应用层可以通过 `wifi_event_cb_t` 回调获知状态变化，用于更新 UI 或执行业务逻辑。
+- **硬件安全**：
+  - 浇花电机 GPIO 仅输出控制信号，实际驱动水泵需使用 MOSFET / 继电器等驱动电路；
+  - 注意防水、防反接、电源能力等硬件设计问题。
 
 ---
 
-## 10. 许可说明
+## 7. 后续扩展方向
 
-如无特别说明，本组件可按照你项目整体的开源/闭源协议一并分发与使用.
+- 支持一天多次浇水计划（早晚浇水等）；
+- 接入土壤湿度传感器，根据湿度自动判断是否需要浇水；
+- 在后台增加统计图表（例如最近一周浇水记录）；
+- 接入更多基于 MQTT 的应用模块（如灯光控制、环境监测等）。
+
