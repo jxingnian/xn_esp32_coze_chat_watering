@@ -105,7 +105,7 @@ static void web_mqtt_manager_subscribe_all_apps(void)
     }
 
     for (int i = 0; i < s_app_entry_count; ++i) {  ///< 遍历所有模块
-        char filter[128];                          ///< 订阅过滤字符串
+        char filter[256];                          ///< 订阅过滤字符串
         snprintf(filter, sizeof(filter), "%s/%s/#", ///< base_topic/prefix/#
                  s_mgr_cfg.base_topic,             ///< 基础 Topic
                  s_app_entries[i].suffix);         ///< 模块前缀
@@ -363,7 +363,7 @@ esp_err_t web_mqtt_manager_register_app(const char *topic_suffix,
     if (s_mgr_cfg.base_topic != NULL &&
         (s_mgr_state == WEB_MQTT_STATE_CONNECTED ||
          s_mgr_state == WEB_MQTT_STATE_READY)) {
-        char filter[128];                          ///< 订阅过滤字符串
+        char filter[256];                          ///< 订阅过滤字符串
         snprintf(filter, sizeof(filter), "%s/%s/#", ///< base_topic/prefix/#
                  s_mgr_cfg.base_topic,             ///< 基础 Topic
                  topic_suffix);                    ///< 模块前缀
