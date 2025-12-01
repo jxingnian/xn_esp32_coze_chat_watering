@@ -2,8 +2,8 @@
  * @Author: 星年 jixingnian@gmail.com
  * @Date: 2025-11-22 13:43:50
  * @LastEditors: xingnian jixingnian@gmail.com
- * @LastEditTime: 2025-11-30 12:52:23
- * @FilePath: \xn_esp32_coze_chat\main\main.c
+ * @LastEditTime: 2025-12-01 14:32:48
+ * @FilePath: \xn_esp32_coze_chat_watering\main\main.c
  * @Description: esp32 网页WiFi配网 By.星年
  */
 
@@ -21,25 +21,45 @@
 #include "coze_chat_app.h"
 #include "audio_app/audio_config_app.h"
 #include "lottie_app/lottie_app.h"
+#include "web_mqtt_manager.h"
+#include "mqtt_app/wifi_config_app.h"
+#include "mqtt_app/watering_app.h"
 
 static const char *TAG = "app";
 
 extern coze_chat_handle_t coze_chat_get_handle(void);
 
 static bool s_coze_started = false;
+static bool s_mqtt_inited  = false;
+
+static void app_mqtt_event_cb(web_mqtt_state_t state);
 
 static void app_wifi_event_cb(wifi_manage_state_t state)
 {
     switch (state) {
     case WIFI_MANAGE_STATE_CONNECTED:
-        if (!s_coze_started) {
+        if (!s_mqtt_inited) {
             ESP_LOGI(TAG, "WiFi connected, init Coze chat");
-            if (coze_chat_app_init() == ESP_OK) {
-                s_coze_started = true;
-                lottie_app_show_mic_idle();
-            } else {
-                ESP_LOGE(TAG, "Coze chat init failed on WiFi connect");
-            }
+
+            // if (coze_chat_app_init() == ESP_OK) {
+            //     s_coze_started = true;
+            //     lottie_app_show_mic_idle();
+            // } else {
+            //     ESP_LOGE(TAG, "Coze chat init failed on WiFi connect");
+            // }
+            
+            web_mqtt_manager_config_t mqtt_cfg = WEB_MQTT_MANAGER_DEFAULT_CONFIG();
+            mqtt_cfg.broker_uri = "mqtt://120.55.96.194:1883";
+            mqtt_cfg.base_topic = "xn/web";
+            mqtt_cfg.event_cb   = app_mqtt_event_cb;
+
+            esp_err_t ret_mqtt = web_mqtt_manager_init(&mqtt_cfg);
+            (void)ret_mqtt;
+
+            (void)wifi_config_app_init();
+            (void)watering_app_init();
+
+            s_mqtt_inited = true;
         }
         break;
 
@@ -53,6 +73,22 @@ static void app_wifi_event_cb(wifi_manage_state_t state)
         lottie_app_show_wifi_connecting();
         break;
 
+    default:
+        break;
+    }
+}
+
+static void app_mqtt_event_cb(web_mqtt_state_t state)
+{
+    switch (state) {
+    case WEB_MQTT_STATE_CONNECTED:
+    case WEB_MQTT_STATE_READY:
+        ESP_LOGI(TAG, "MQTT connected");
+        break;
+    case WEB_MQTT_STATE_DISCONNECTED:
+    case WEB_MQTT_STATE_ERROR:
+        ESP_LOGW(TAG, "MQTT disconnected or error");
+        break;
     default:
         break;
     }
@@ -147,12 +183,12 @@ void app_main(void)
 
     printf("esp32 网页WiFi配网 By.星年\n");
 
-    ret = lottie_app_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "lottie_app_init failed: %s", esp_err_to_name(ret));
-    } else {
-        lottie_app_show_wifi_connecting();
-    }
+    // ret = lottie_app_init();
+    // if (ret != ESP_OK) {
+    //     ESP_LOGE(TAG, "lottie_app_init failed: %s", esp_err_to_name(ret));
+    // } else {
+    //     lottie_app_show_wifi_connecting();
+    // }
 
     wifi_manage_config_t wifi_cfg = WIFI_MANAGE_DEFAULT_CONFIG();
     wifi_cfg.wifi_event_cb = app_wifi_event_cb;
@@ -161,23 +197,23 @@ void app_main(void)
         ESP_LOGE(TAG, "wifi_manage_init failed: %s", esp_err_to_name(ret));
     }
     
-    // 构建音频管理器配置
-    audio_mgr_config_t audio_cfg = {0};
-    audio_config_app_build(&audio_cfg, audio_event_cb, NULL);
+    // // 构建音频管理器配置
+    // audio_mgr_config_t audio_cfg = {0};
+    // audio_config_app_build(&audio_cfg, audio_event_cb, NULL);
 
-    // 初始化音频管理器
-    ESP_LOGI(TAG, "init audio manager");
-    ESP_ERROR_CHECK(audio_manager_init(&audio_cfg));
+    // // 初始化音频管理器
+    // ESP_LOGI(TAG, "init audio manager");
+    // ESP_ERROR_CHECK(audio_manager_init(&audio_cfg));
     
-    // 设置播放音量为100%
-    audio_manager_set_volume(100);
+    // // 设置播放音量为100%
+    // audio_manager_set_volume(100);
     
-    // 注册录音数据回调，将麦克风PCM送入 Coze
-    audio_manager_set_record_callback(loopback_record_cb, NULL);
+    // // 注册录音数据回调，将麦克风PCM送入 Coze
+    // audio_manager_set_record_callback(loopback_record_cb, NULL);
     
-    // 启动播放任务（保持播放任务常驻，随时准备播放数据）
-    ESP_ERROR_CHECK(audio_manager_start_playback());
+    // // 启动播放任务（保持播放任务常驻，随时准备播放数据）
+    // ESP_ERROR_CHECK(audio_manager_start_playback());
     
-    // 启动音频管理器（开始录音和VAD检测）
-    ESP_ERROR_CHECK(audio_manager_start());
+    // // 启动音频管理器（开始录音和VAD检测）
+    // ESP_ERROR_CHECK(audio_manager_start());
 }

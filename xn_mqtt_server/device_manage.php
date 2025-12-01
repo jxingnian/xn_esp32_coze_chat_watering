@@ -50,8 +50,9 @@ $ts     = $device['last_seen_at'] ? strtotime($device['last_seen_at']) : 0;
 $online = $ts && ($now - $ts <= XN_DEVICE_OFFLINE_SECONDS);
 
 // 解析 meta_json 中的 WiFi 相关信息（由设备通过 MQTT 上报）
-$wifiStatus = null;
-$wifiSaved  = [];
+$wifiStatus     = null;
+$wifiSaved      = [];
+$wateringStatus = null;
 if (!empty($device['meta_json'])) {
     $meta = json_decode($device['meta_json'], true);
     if (is_array($meta)) {
@@ -65,6 +66,9 @@ if (!empty($device['meta_json'])) {
             } else {
                 $wifiSaved = $meta['wifi_saved'];
             }
+        }
+        if (isset($meta['watering_status']) && is_array($meta['watering_status'])) {
+            $wateringStatus = $meta['watering_status'];
         }
     }
 }
@@ -173,6 +177,40 @@ include __DIR__ . '/header.php';
     设备收到后会尝试连接对应 WiFi。
 </p>
 
+<h3 style="margin-top:24px;">自动浇花</h3>
+<div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:16px; align-items:center;">
+    <div style="width:140px; text-align:center;">
+        <div style="width:80px; height:80px; margin:0 auto; position:relative;">
+            <div style="position:absolute; bottom:0; left:10px; right:10px; height:30px; background:#8d6e63; border-radius:4px 4px 6px 6px;"></div>
+            <div style="position:absolute; bottom:30px; left:18px; right:18px; height:28px; background:linear-gradient(180deg,#81c784,#4caf50); border-radius:50% 50% 40% 40%;"></div>
+            <div style="position:absolute; top:10px; left:35px; width:10px; height:25px; background:#4caf50; border-radius:5px;"></div>
+            <div style="position:absolute; top:5px; left:28px; width:16px; height:16px; background:#66bb6a; border-radius:50% 50% 50% 10%; transform:rotate(-15deg);"></div>
+        </div>
+        <div style="margin-top:6px; font-size:13px; color:#666;">花盆示意</div>
+    </div>
+    <div style="flex:1; font-size:14px;">
+        <p>
+            当前浇花状态：
+            <?php if ($wateringStatus && !empty($wateringStatus['on'])): ?>
+                <span class="status-dot status-online"></span>浇花已开启
+            <?php elseif ($wateringStatus && array_key_exists('on', $wateringStatus) && empty($wateringStatus['on'])): ?>
+                <span class="status-dot status-offline"></span>浇花已关闭
+            <?php else: ?>
+                <span class="status-dot status-offline"></span>未知（尚未收到设备上报）
+            <?php endif; ?>
+        </p>
+        <div style="margin-top:8px;">
+            <button type="button" class="btn btn-primary" id="btn-watering-on">开启浇花</button>
+            <button type="button" class="btn" id="btn-watering-off">关闭浇花</button>
+            <button type="button" class="btn" id="btn-watering-refresh" style="margin-left:8px;">刷新状态</button>
+        </div>
+        <p style="margin-top:8px; font-size:13px; color:#666;">
+            浇花开关通过 MQTT 控制电机 IO，Topic 为
+            <?php echo htmlspecialchars(XN_MQTT_BASE_TOPIC, ENT_QUOTES, 'UTF-8'); ?>/watering/<?php echo htmlspecialchars($device['device_id'], ENT_QUOTES, 'UTF-8'); ?>/(set|get_status)。
+        </p>
+    </div>
+</div>
+
 <script>
 (function() {
     var form = document.getElementById('wifi-config-form');
@@ -270,6 +308,48 @@ include __DIR__ . '/header.php';
             }).catch(function () {});
 
             alert('已请求设备上报 WiFi 状态和已保存列表，请稍候刷新页面查看最新信息。');
+        });
+    }
+
+    var btnWaterOn = document.getElementById('btn-watering-on');
+    var btnWaterOff = document.getElementById('btn-watering-off');
+    var btnWaterRefresh = document.getElementById('btn-watering-refresh');
+
+    function sendWateringCommand(subTopic, payload, okMessage) {
+        var topic = baseTopic + '/watering/' + deviceId + '/' + subTopic;
+        fetch('api/mqtt_publish.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic: topic, payload: payload, retain: false })
+        }).then(function (resp) { return resp.json(); })
+        .then(function (data) {
+            if (data && data.status === 'ok') {
+                if (okMessage) {
+                    alert(okMessage);
+                }
+            } else {
+                alert('发送失败：' + (data && data.message ? data.message : '未知错误'));
+            }
+        }).catch(function () {
+            alert('网络错误，发送失败。');
+        });
+    }
+
+    if (btnWaterOn) {
+        btnWaterOn.addEventListener('click', function () {
+            sendWateringCommand('set', 'on', '已发送开启浇花指令，请稍候刷新状态。');
+        });
+    }
+
+    if (btnWaterOff) {
+        btnWaterOff.addEventListener('click', function () {
+            sendWateringCommand('set', 'off', '已发送关闭浇花指令，请稍候刷新状态。');
+        });
+    }
+
+    if (btnWaterRefresh) {
+        btnWaterRefresh.addEventListener('click', function () {
+            sendWateringCommand('get_status', '', '已请求设备上报浇花状态，请稍候刷新页面查看最新信息。');
         });
     }
 })();

@@ -130,12 +130,14 @@ if ($topic !== '') {
     }
 }
 
-// 处理 WiFi 状态上报与已保存列表上报：
-//  - xn/esp/wifi/<device_id>/status 上报当前 WiFi 连接状态（JSON）
-//  - xn/esp/wifi/<device_id>/saved  上报已保存 WiFi 列表（JSON）
+// 处理 WiFi 状态上报与已保存列表上报，以及浇花状态上报：
+//  - xn/esp/wifi/<device_id>/status    上报当前 WiFi 连接状态（JSON）
+//  - xn/esp/wifi/<device_id>/saved     上报已保存 WiFi 列表（JSON）
+//  - xn/esp/watering/<device_id>/status 上报当前浇花开关状态（JSON）
 if ($topic !== '' && $payload !== '') {
-    $wifiStatusPrefix = XN_MQTT_UPLINK_BASE_TOPIC . '/wifi/' . $clientId . '/status';
-    $wifiSavedPrefix  = XN_MQTT_UPLINK_BASE_TOPIC . '/wifi/' . $clientId . '/saved';
+    $wifiStatusPrefix    = XN_MQTT_UPLINK_BASE_TOPIC . '/wifi/' . $clientId . '/status';
+    $wifiSavedPrefix     = XN_MQTT_UPLINK_BASE_TOPIC . '/wifi/' . $clientId . '/saved';
+    $wateringStatusPrefix = XN_MQTT_UPLINK_BASE_TOPIC . '/watering/' . $clientId . '/status';
 
     $needUpdateMeta = false;
     $meta           = [];
@@ -158,6 +160,12 @@ if ($topic !== '' && $payload !== '') {
         if (is_array($saved)) {
             $meta['wifi_saved'] = $saved;
             $needUpdateMeta     = true;
+        }
+    } elseif (strpos($topic, $wateringStatusPrefix) === 0) {
+        $watering = json_decode($payload, true);
+        if (is_array($watering)) {
+            $meta['watering_status'] = $watering;
+            $needUpdateMeta          = true;
         }
     }
 
