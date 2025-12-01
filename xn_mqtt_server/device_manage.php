@@ -79,7 +79,7 @@ if (!empty($device['meta_json'])) {
 
 include __DIR__ . '/header.php';
 ?>
-<h2>设备管理：<?php echo htmlspecialchars($device['device_id'], ENT_QUOTES, 'UTF-8'); ?></h2>
+<h2 class="page-title">设备管理：<?php echo htmlspecialchars($device['device_id'], ENT_QUOTES, 'UTF-8'); ?></h2>
 <p>
     在线状态：
     <?php if ($online): ?>
