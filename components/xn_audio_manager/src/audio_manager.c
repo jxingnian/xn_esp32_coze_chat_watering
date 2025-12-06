@@ -1,9 +1,9 @@
 /*
  * @Author: 星年 && jixingnian@gmail.com
  * @Date: 2025-11-27 19:17:04
- * @LastEditors: xingnian j_xingnian@163.com
- * @LastEditTime: 2025-11-28 19:36:06
- * @FilePath: \xn_esp32_audio\components\audio_manager\src\audio_manager.c
+ * @LastEditors: xingnian jixingnian@gmail.com
+ * @LastEditTime: 2025-12-04 19:37:06
+ * @FilePath: \xn_esp32_coze_chat\components\xn_audio_manager\src\audio_manager.c
  * @Description: 音频管理器实现 - 模块化架构
  * 
  * Copyright (c) 2025 by ${git_name_email}, All Rights Reserved. 
@@ -75,6 +75,7 @@ typedef struct {
     audio_mgr_state_t state;                ///< 状态机
     bool wake_active;                       ///< 是否处于唤醒窗口
     TickType_t wake_deadline_tick;          ///< 唤醒超时tick
+    TickType_t vad_grace_period_tick;       ///< VAD 宽限期结束时间（唤醒后忽略 VAD_END）
     
     // 回调
     audio_record_callback_t record_callback; ///< 录音数据回调函数
@@ -292,6 +293,8 @@ static void audio_manager_handle_internal_event(const audio_mgr_internal_msg_t *
         audio_manager_notify_event(&evt);
         s_ctx.recording = true;
         audio_manager_arm_wake_timer(s_ctx.config.wakeup_config.wakeup_timeout_ms);
+        // 设置 VAD 宽限期：按键后 2 秒内忽略 VAD_END
+        s_ctx.vad_grace_period_tick = xTaskGetTickCount() + pdMS_TO_TICKS(2000);
         audio_manager_refresh_state();
         break;
 
@@ -307,23 +310,42 @@ static void audio_manager_handle_internal_event(const audio_mgr_internal_msg_t *
         audio_manager_notify_event(&evt);
         s_ctx.recording = true;
         audio_manager_arm_wake_timer(s_ctx.config.wakeup_config.wakeup_timeout_ms);
+        // 设置 VAD 宽限期：唤醒后 2 秒内忽略 VAD_END，给用户时间开始说话
+        s_ctx.vad_grace_period_tick = xTaskGetTickCount() + pdMS_TO_TICKS(2000);
         audio_manager_refresh_state();
         break;
 
     case AUDIO_INT_EVT_VAD_START:
-        evt.type = AUDIO_MGR_EVENT_VAD_START;
-        audio_manager_notify_event(&evt);
-        s_ctx.recording = true;
-        audio_manager_arm_wake_timer(s_ctx.config.wakeup_config.wakeup_timeout_ms);
-        audio_manager_refresh_state();
+        // ⚠️ VAD 不能触发唤醒！只有在唤醒窗口内才处理 VAD 事件
+        if (s_ctx.wake_active) {
+            evt.type = AUDIO_MGR_EVENT_VAD_START;
+            audio_manager_notify_event(&evt);
+            // ✅ 唤醒后已经在录音，VAD_START 只是通知事件，不改变录音状态
+            // s_ctx.recording = true;  // 已经在唤醒时设置了
+            audio_manager_arm_wake_timer(s_ctx.config.wakeup_config.wakeup_timeout_ms);
+            audio_manager_refresh_state();
+        }
         break;
 
     case AUDIO_INT_EVT_VAD_END:
-        evt.type = AUDIO_MGR_EVENT_VAD_END;
-        audio_manager_notify_event(&evt);
-        s_ctx.recording = false;
-        audio_manager_arm_wake_timer(s_ctx.config.wakeup_config.wakeup_end_delay_ms);
-        audio_manager_refresh_state();
+        // ⚠️ VAD 只在唤醒窗口内有效
+        if (s_ctx.wake_active) {
+            // 检查是否在 VAD 宽限期内（唤醒后 2 秒内忽略 VAD_END）
+            TickType_t now = xTaskGetTickCount();
+            if ((int32_t)(now - s_ctx.vad_grace_period_tick) < 0) {
+                ESP_LOGD(TAG, "VAD_END 在宽限期内，忽略（还剩 %d ms）",
+                         (int)((s_ctx.vad_grace_period_tick - now) * portTICK_PERIOD_MS));
+                break;  // 忽略此 VAD_END 事件
+            }
+            
+            evt.type = AUDIO_MGR_EVENT_VAD_END;
+            audio_manager_notify_event(&evt);
+            s_ctx.recording = false;
+            // ✅ VAD 结束后清除唤醒超时，等待 Coze 回复
+            // 不再设置短超时，让 Coze 有足够时间处理和回复
+            audio_manager_clear_wake_timer();
+            audio_manager_refresh_state();
+        }
         break;
 
     case AUDIO_INT_EVT_WAKE_TIMEOUT:
