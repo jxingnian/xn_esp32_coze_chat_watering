@@ -56,7 +56,7 @@ void audio_config_app_build(audio_mgr_config_t *cfg,
     cfg->hw_config.button.active_low = true;  // 低电平有效
 
     // ========== 唤醒词配置 ==========
-    cfg->wakeup_config.enabled = false;       // 默认禁用唤醒词
+    cfg->wakeup_config.enabled = true;       // 默认禁用唤醒词
     cfg->wakeup_config.wake_word_name = "小鸭小鸭";  // 唤醒词名称
     cfg->wakeup_config.model_partition = "model";    // 模型分区名称
     cfg->wakeup_config.sensitivity = 2;              // 灵敏度：中等

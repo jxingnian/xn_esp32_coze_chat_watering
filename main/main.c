@@ -41,12 +41,12 @@ static void app_wifi_event_cb(wifi_manage_state_t state)
         if (!s_mqtt_inited) {
             ESP_LOGI(TAG, "WiFi connected, init Coze chat");
 
-            // if (coze_chat_app_init() == ESP_OK) {
-            //     s_coze_started = true;
-            //     lottie_app_show_mic_idle();
-            // } else {
-            //     ESP_LOGE(TAG, "Coze chat init failed on WiFi connect");
-            // }
+            if (coze_chat_app_init() == ESP_OK) {
+                s_coze_started = true;
+                lottie_app_show_mic_idle();
+            } else {
+                ESP_LOGE(TAG, "Coze chat init failed on WiFi connect");
+            }
             
             web_mqtt_manager_config_t mqtt_cfg = WEB_MQTT_MANAGER_DEFAULT_CONFIG();
             mqtt_cfg.broker_uri = "mqtt://120.55.96.194:1883";
@@ -183,12 +183,12 @@ void app_main(void)
 
     printf("esp32 网页WiFi配网 By.星年\n");
 
-    // ret = lottie_app_init();
-    // if (ret != ESP_OK) {
-    //     ESP_LOGE(TAG, "lottie_app_init failed: %s", esp_err_to_name(ret));
-    // } else {
-    //     lottie_app_show_wifi_connecting();
-    // }
+    ret = lottie_app_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "lottie_app_init failed: %s", esp_err_to_name(ret));
+    } else {
+        lottie_app_show_wifi_connecting();
+    }
 
     wifi_manage_config_t wifi_cfg = WIFI_MANAGE_DEFAULT_CONFIG();
     wifi_cfg.wifi_event_cb = app_wifi_event_cb;
@@ -197,23 +197,23 @@ void app_main(void)
         ESP_LOGE(TAG, "wifi_manage_init failed: %s", esp_err_to_name(ret));
     }
     
-    // // 构建音频管理器配置
-    // audio_mgr_config_t audio_cfg = {0};
-    // audio_config_app_build(&audio_cfg, audio_event_cb, NULL);
+    // 构建音频管理器配置
+    audio_mgr_config_t audio_cfg = {0};
+    audio_config_app_build(&audio_cfg, audio_event_cb, NULL);
 
-    // // 初始化音频管理器
-    // ESP_LOGI(TAG, "init audio manager");
-    // ESP_ERROR_CHECK(audio_manager_init(&audio_cfg));
+    // 初始化音频管理器
+    ESP_LOGI(TAG, "init audio manager");
+    ESP_ERROR_CHECK(audio_manager_init(&audio_cfg));
     
-    // // 设置播放音量为100%
-    // audio_manager_set_volume(100);
+    // 设置播放音量为100%
+    audio_manager_set_volume(100);
     
-    // // 注册录音数据回调，将麦克风PCM送入 Coze
-    // audio_manager_set_record_callback(loopback_record_cb, NULL);
+    // 注册录音数据回调，将麦克风PCM送入 Coze
+    audio_manager_set_record_callback(loopback_record_cb, NULL);
     
-    // // 启动播放任务（保持播放任务常驻，随时准备播放数据）
-    // ESP_ERROR_CHECK(audio_manager_start_playback());
+    // 启动播放任务（保持播放任务常驻，随时准备播放数据）
+    ESP_ERROR_CHECK(audio_manager_start_playback());
     
-    // // 启动音频管理器（开始录音和VAD检测）
-    // ESP_ERROR_CHECK(audio_manager_start());
+    // 启动音频管理器（开始录音和VAD检测）
+    ESP_ERROR_CHECK(audio_manager_start());
 }
